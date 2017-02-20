@@ -1,0 +1,123 @@
+---
+title: "Practical Machine Learning Course Project HK"
+author: "Hitoshi Kawashima"
+date: "February 19, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+## Objectives
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## Getting and Cleaning Data
+
+```{r}
+# Load data files
+training <- read.csv("~/Desktop/Coursera/pml-training.csv")
+testing <- read.csv("~/Desktop/Coursera/pml-testing.csv")
+
+str(training)
+dim(training)
+dim(testing)
+
+# Load relevant packages
+library(ggplot2)
+library(caret)
+library(rattle)
+library(randomForest)
+
+# Create a training (training1) and validation (training2) subsets within the training data
+set.seed(10)
+inTrain <- createDataPartition(y = training$classe, p = 0.7, list = FALSE)
+training1 <- training[inTrain, ]
+training2 <- training[-inTrain, ]
+```
+
+Remove variables that could throw off the model from both the training and validation data sets: a) near zero variance b) mostly NA c) identifiers
+
+```{r}
+# a) near zero variance
+nzv <- nearZeroVar(training1)
+training1 <- training1[, -nzv]
+training2 <- training2[, -nzv]
+
+# b) mostly NA
+mostlyNA <- sapply(training1, function(x) mean(is.na(x))) > 0.95
+training1 <- training1[, mostlyNA == FALSE]
+training2 <- training2[, mostlyNA == FALSE]
+
+# c) identifiers, first 5 variables in the data set
+training1 <- training1[, -(1:5)]
+training2 <- training2[, -(1:5)]
+```
+
+## rpart model
+
+```{r}
+set.seed(10)
+
+# Fit model on training1
+mod_rpart <- train(classe ~ ., method = "rpart", data = training1)
+
+# Print final model
+print(mod_rpart$finalModel)
+
+# Create a nicer graphic
+fancyRpartPlot(mod_rpart$finalModel)
+
+# Predict class in validation subset using the rpart model
+pred_rpart <- predict(mod_rpart, training2)
+
+# Call the confusion matrix to see the accuracy / estimated out-of-sample error
+confusionMatrix(training2$classe, pred_rpart)
+```
+The accuracy is not that high so try another model
+
+## Random forest model
+
+```{r}
+set.seed(10)
+
+# Fit model on training1
+mod_rf <- randomForest(classe ~ ., data = training1)
+
+# Print model
+print(mod_rf)
+
+# Predict class in validation subset using the random forest model
+pred_rf <- predict(mod_rf, training2)
+
+# Call the confusion matrix to see the accuracy / estimated out-of-sample error
+confusionMatrix(training2$classe, pred_rf)
+```
+The accuracy is 99.75% so the estimated out-of-sample error is 0.25%
+
+## Creating answer files
+
+```{r}
+# Predict class in testing set using the random forest model
+answers <- predict(mod_rf, newdata = testing)
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_", i ,".txt")
+    write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, col.names = FALSE)
+  }
+}
+
+pml_write_files(answers)
+print(answers)
+```
+
+## The source of the data
+
+The assignment is based on data of weight lifting exercises. It has been published:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). Stuttgart, Germany: ACM SIGCHI, 2013.
